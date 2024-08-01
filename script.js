@@ -27,6 +27,8 @@ document.getElementById('prediction-form').addEventListener('submit', function(e
         active: parseInt(active)
     };
 
+    console.log("Sending data:", data);
+
     fetch('http://localhost:5000/predict', {
         method: 'POST',
         headers: {
@@ -37,8 +39,9 @@ document.getElementById('prediction-form').addEventListener('submit', function(e
     })
     .then(response => response.json())
     .then(result => {
+        console.log("Received result:", result);
         const resultDiv = document.getElementById('result');
-        if (result.prediction) {
+        if (result.result === 1) {
             resultDiv.textContent = "You may have a risk of heart disease";
             resultDiv.style.color = "#e74c3c";
         } else {

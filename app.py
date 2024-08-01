@@ -6,6 +6,10 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
+import logging
+
+# Thiết lập logging
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 CORS(app)
@@ -37,6 +41,8 @@ def predict():
     try:
         # Parse the input data from the request
         data = request.get_json()
+        logging.debug(f"Received data: {data}")
+
         df = pd.DataFrame([data])
 
         # Check if required columns are present
@@ -50,17 +56,24 @@ def predict():
         # Drop columns not used for prediction
         df = df[['age', 'bmi', 'ap_hi', 'ap_lo', 'cholesterol', 'gluc', 'gender']]
 
+        logging.debug(f"Processed dataframe: {df.to_dict(orient='records')}")
+
         # Preprocess the input data
         input_data_processed = preprocess_pipeline.fit_transform(df)
 
+        logging.debug(f"Preprocessed data shape: {input_data_processed.shape}")
+
         # Make prediction
         prediction = model.predict(input_data_processed)
+        logging.debug(f"Model prediction: {prediction}")
 
         # Return prediction result
-        result = 'Có nguy cơ bệnh tim' if prediction[0] == 1 else 'Không có nguy cơ bệnh tim'
+        result = int(prediction[0])
+        logging.debug(f"Returning result: {result}")
         return jsonify({'result': result}), 200
 
     except Exception as e:
+        logging.error(f"Error occurred: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
