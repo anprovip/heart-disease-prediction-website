@@ -1,44 +1,68 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import tensorflow as tf
+import pickle
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+import pandas as pd
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 
 app = Flask(__name__)
 CORS(app)
 
-# Load the model
-model = tf.keras.models.load_model('NN.h5', compile=False)
+# Load pre-trained model and preprocessing pipeline
+with open('voting_classifier_model.pkl', 'rb') as model_file:
+    model = pickle.load(model_file)
 
-# Initialize the StandardScaler
-ss = StandardScaler()
+# Define preprocessing pipeline
+num_features = ['age', 'bmi', 'ap_hi', 'ap_lo']
+cat_features = ['cholesterol', 'gluc', 'gender']
 
-# Define the expected features for scaling
-expected_features = ['age', 'gender', 'height', 'weight', 'ap_hi', 'ap_lo', 'cholesterol', 'gluc', 'smoke', 'alco', 'active']
+num_pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+])
+
+cat_pipeline = Pipeline([
+    ('onehot', OneHotEncoder()),
+])
+
+preprocess_pipeline = ColumnTransformer([
+    ("num", num_pipeline, num_features),
+    ("cat", cat_pipeline, cat_features),
+])
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.json
-    
-    # Check if all expected features are present in the input
-    if not all(feature in data for feature in expected_features):
-        return jsonify({'error': 'Missing input data'}), 400
-    
-    # Extract data
-    input_data = np.array([[data[feature] for feature in expected_features]])
-    
-    # Scale the input data
-    scaled_data = ss.fit_transform(input_data)  # Ensure scaler is fitted with same parameters used during training
+    try:
+        # Parse the input data from the request
+        data = request.get_json()
+        df = pd.DataFrame([data])
 
-    # Make prediction
-    prediction = model.predict(scaled_data)
-    prediction_label = np.argmax(prediction, axis=1)[0]
+        # Check if required columns are present
+        required_columns = num_features + cat_features
+        if not all(col in df.columns for col in required_columns):
+            return jsonify({'error': 'Invalid input data'}), 400
 
-    # Convert prediction to "Có" or "Không"
-    prediction_result = "Có" if prediction_label == 1 else "Không"
+        # Calculate BMI
+        df['bmi'] = df['weight'] / ((df['height'] / 100) ** 2)
 
-    # Output the prediction as JSON
-    return jsonify({'prediction': prediction_result})
+        # Drop columns not used for prediction
+        df = df[['age', 'bmi', 'ap_hi', 'ap_lo', 'cholesterol', 'gluc', 'gender']]
+
+        # Preprocess the input data
+        input_data_processed = preprocess_pipeline.fit_transform(df)
+
+        # Make prediction
+        prediction = model.predict(input_data_processed)
+
+        # Return prediction result
+        result = 'Có nguy cơ bệnh tim' if prediction[0] == 1 else 'Không có nguy cơ bệnh tim'
+        return jsonify({'result': result}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)
